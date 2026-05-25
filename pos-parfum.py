@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 
 # Pengaturan judul halaman web
-st.set_page_config(page_title="POS Multi-Marketplace & Manajemen Harga", page_icon="🏪", layout="wide")
+st.set_page_config(page_title="POS Kloning - Shopee & TikTok Shop", page_icon="🛍️", layout="wide")
 
 # Nama file database lokal
 DB_FILE = "database_transaksi.csv"
@@ -12,9 +12,8 @@ DB_HARGA = "database_harga.csv"
 DB_MASTER_PRODUK = "database_master_produk.csv"
 
 # ==========================================
-# 🔥 CRITICAL FIX: RESET OTOMATIS JIKA DATA BENTROK
+# 🔥 CRITICAL FIX: RESET DATA JIKA DATA LAMA BENTROK
 # ==========================================
-# Jika file lama terdeteksi rusak/inkonsisten, hapus agar digenerate ulang dengan aman
 if os.path.exists(DB_HARGA):
     try:
         test_df = pd.read_csv(DB_HARGA)
@@ -38,33 +37,20 @@ AKUN_USER = {
     "admin": {"password": "admin123", "role": "Admin"}
 }
 
-# 2. DAFTAR MASTER PRODUK BAWAAN (Otomatis dibuat jika sistem kosong)
-PRODUK_DEFAULT = [
-    "Ayam Kampung Omega", 
-    "Ayam Kampung Omega Grade A", 
-    "Ayam Negri", 
-    "Ayam Negri Omega", 
-    "Ayam Kampung Kuning", 
-    "Ayam Kampung Kuning Grade A", 
-    "Puyuh", 
-    "Bebek", 
-    "Bebek Asin", 
-    "Kampung Omega (30 butir)", 
-    "Kampung Omega Grade A (30 butir)"
-]
+# 2. DAFTAR MASTER PRODUK BAWAAN (Dikosongkan sesuai request)
+PRODUK_DEFAULT = []
 
-# 3. DICTIONARY BIAYA ADMIN PER MARKETPLACE
+# 3. DICTIONARY BIAYA ADMIN TERBARU SESUAI HITUNGAN REQUEST
+# Shopee: 8.25% + 4.5% + 4.33% = 17.08% | Fix = 1250
+# TikTok: 7.14% + 6.62% + 7% + 3% = 23.76% | Fix = 1250
 KONS_MARKETPLACE = {
-    "Shopee": {"persen": 12.50, "fix": 1250},
-    "Tokopedia": {"persen": 16.97, "fix": 0},
-    "TikTok Shop": {"persen": 8.00, "fix": 2000},
-    "Lazada": {"persen": 7.00, "fix": 1000},
-    "Offline / WA": {"persen": 0.00, "fix": 0}
+    "Shopee": {"persen": 17.08, "fix": 1250},
+    "TikTok Shop": {"persen": 23.76, "fix": 1250}
 }
 
-# --- FUNGSI DETEKSI & MUAT DATABASE (ANTI-KOSONG AUTOMATION) ---
+# --- FUNGSI DETEKSI & MUAT DATABASE ---
 def muat_daftar_produk():
-    """Memuat list produk. Jika file kosong/tidak ada, langsung diisi default otomatis"""
+    """Memuat list produk yang ada"""
     if os.path.exists(DB_MASTER_PRODUK):
         try:
             df = pd.read_csv(DB_MASTER_PRODUK)
@@ -72,23 +58,17 @@ def muat_daftar_produk():
                 return df["Produk"].dropna().tolist()
         except Exception:
             pass
-            
-    # Jika file rusak/kosong, buat baru dengan data default
-    df = pd.DataFrame({"Produk": PRODUK_DEFAULT})
-    df.to_csv(DB_MASTER_PRODUK, index=False)
     return PRODUK_DEFAULT
 
 def muat_database_harga():
-    """Memuat tabel harga modal & jual. Jika kosong, langsung disinkronkan otomatis"""
+    """Memuat tabel harga modal & jual berdasarkan master produk"""
     daftar_produk_aktif = muat_daftar_produk()
     
     if os.path.exists(DB_HARGA):
         try:
             df = pd.read_csv(DB_HARGA)
             if not df.empty and "Produk" in df.columns:
-                # Sinkronisasi: Buang produk yang sudah dihapus dari master
                 df = df[df["Produk"].isin(daftar_produk_aktif)]
-                # Sinkronisasi: Tambah produk baru yang belum ada di tabel harga
                 missing_products = [p for p in daftar_produk_aktif if p not in df["Produk"].values]
                 if missing_products:
                     new_rows = pd.DataFrame([{"Produk": p, "Harga Jual": 100000, "Harga Modal": 60000} for p in missing_products])
@@ -98,7 +78,6 @@ def muat_database_harga():
         except Exception:
             pass
             
-    # Jika file harga kosong/rusak, generate ulang berdasarkan daftar produk aktif
     default_data = [{"Produk": p, "Harga Jual": 100000, "Harga Modal": 60000} for p in daftar_produk_aktif]
     df = pd.DataFrame(default_data)
     df.to_csv(DB_HARGA, index=False)
@@ -130,13 +109,12 @@ def hapus_produk_by_name(nama_hapus):
     df_master = pd.DataFrame({"Produk": daftar_produk})
     df_master.to_csv(DB_MASTER_PRODUK, index=False)
     
-    # Generate ulang tabel harga agar baris produk terhapus langsung hilang
     df_harga = muat_database_harga()
     df_harga = df_harga[df_harga["Produk"] != nama_hapus]
     simpan_database_harga(df_harga)
     return True
 
-# --- FUNGSI DATABASE TRANSAKSI LOKAL ---
+# --- FUNGSI TRANSAKSI ---
 def muat_data_transaksi():
     if os.path.exists(DB_FILE):
         try:
@@ -180,14 +158,14 @@ def hapus_transaksi_by_index(index_yang_dihapus):
         return True
     return False
 
-# --- LOGIKA SISTEM LOGIN ---
+# --- LOGIKA SYSTEM LOGIN ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_role = None
     st.session_state.username = ""
 
 if not st.session_state.logged_in:
-    st.markdown("<h2 style='text-align: center;'>🔐 Login Sistem Kasir POS</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>🔐 Login Sistem Klon POS</h2>", unsafe_allow_html=True)
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
     with col_l2:
         with st.form("form_login"):
@@ -203,14 +181,13 @@ if not st.session_state.logged_in:
                     st.success(f"🎉 Login Berhasil sebagai {st.session_state.user_role}!")
                     st.rerun()
                 else:
-                    st.error("❌ Username atau Password salah, silakan cek kembali!")
+                    st.error("❌ Username atau Password salah!")
     st.stop()
 
-# --- AMBIL DATA AKTIF (AUTO REPAIR JIKA KOSONG) ---
+# --- AMBIL DATA AKTIF ---
 MASTER_PRODUK_AKTIF = muat_daftar_produk()
 df_harga_aktif = muat_database_harga()
 
-# Membuat Sidebar
 with st.sidebar:
     st.markdown(f"### 👤 Akun Aktif")
     st.write(f"**Username:** `{st.session_state.username}`")
@@ -222,8 +199,8 @@ with st.sidebar:
         st.session_state.username = ""
         st.rerun()
 
-st.title("🏪 MESIN POS MULTI-MARKETPLACE")
-st.write(f"Selamat bekerja, **{st.session_state.user_role}**! Data tersinkronisasi otomatis.")
+st.title("🏪 MESIN POS KLON - DUA PLATFORM")
+st.write(f"Selamat bekerja, **{st.session_state.user_role}**!")
 
 tab1, tab2, tab3 = st.tabs(["📥 Input Transaksi Baru", "📈 Riwayat & Laporan Penjualan", "⚙️ Kelola Manajemen Produk & Harga"])
 
@@ -231,7 +208,7 @@ tab1, tab2, tab3 = st.tabs(["📥 Input Transaksi Baru", "📈 Riwayat & Laporan
 with tab1:
     st.subheader("Tambah Transaksi Baru")
     if not MASTER_PRODUK_AKTIF:
-        st.warning("⚠️ Belum ada daftar produk di sistem.")
+        st.warning("⚠️ Daftar produk masih kosong polos, Bestie! Silakan login sebagai Owner dan tambahkan produk baru di Tab 3 terlebih dahulu.")
     else:
         col1, col2 = st.columns(2)
         with col1:
@@ -245,23 +222,29 @@ with tab1:
             
             st.write(f"💵 **Harga Jual Hari Ini:** Rp {harga_jual_terkunci:,.0f}")
             st.write(f"📉 **Harga Modal Hari Ini:** Rp {harga_modal_terkunci:,.0f}")
-            jumlah_terjual = st.number_input("Jumlah Terjual (pcs/pack)", min_value=1, value=1, key="jumlah")
+            jumlah_terjual = st.number_input("Jumlah Terjual", min_value=1, value=1, key="jumlah")
 
         with col2:
             st.markdown("### 💸 Biaya Tambahan")
-            biaya_lainnya = st.number_input("Biaya Lain-lain per Produk (Rp)", min_value=0, value=2000, key="lain")
+            biaya_lainnya = st.number_input("Biaya Lain-lain per Produk (Rp)", min_value=0, value=0, key="lain")
             p_persen = KONS_MARKETPLACE[platform_pilihan]["persen"]
             p_fix = KONS_MARKETPLACE[platform_pilihan]["fix"]
             
+            # Keterangan breakdown biaya request user
+            if platform_pilihan == "Shopee":
+                breakdown_text = "*(Admin 8.25% + Layanan 4.5% + Komisi AMS 4.33%)*"
+            else:
+                breakdown_text = "*(Komisi 7.14% + Pengiriman 6.62% + Dinamis 7% + Eksklusif 3%)*"
+
             st.info(f"""
             **📋 Skema Potongan Admin Aktif ({platform_pilihan}):**
-            * Biaya Admin Persen: **{p_persen}%** dari total omset.
-            * Biaya Fix Transaksi: **Rp {p_fix:,.0f}** dipotong per transaksi.
+            * Total Admin Persen: **{p_persen}%** {breakdown_text} dari total omset.
+            * Biaya Proses/Fix: **Rp {p_fix:,.0f}** dipotong per transaksi.
             """)
 
         if st.button("💾 Simpan Transaksi Ke Database", type="primary", use_container_width=True):
             simpan_transaksi(platform_pilihan, nama_produk, harga_jual_terkunci, harga_modal_terkunci, jumlah_terjual, biaya_lainnya)
-            st.success(f"✅ Transaksi [{platform_pilihan}] untuk '{nama_produk}' berhasil disimpan!")
+            st.success(f"✅ Transaksi [{platform_pilihan}] berhasil disimpan!")
             st.rerun()
 
 # --- TAB 2: RIWAYAT & LAPORAN ---
@@ -294,7 +277,7 @@ with tab2:
                 df_filtered = df_filtered[df_filtered["Produk"] == produk_terpilih]
                 
             if df_filtered.empty:
-                st.warning(f"Tidak ada transaksi yang cocok pada filter terpilih.")
+                st.warning(f"Tidak ada transaksi yang cocok.")
             else:
                 total_omset = df_filtered["Total Omset"].sum()
                 total_profit = df_filtered["Total Profit"].sum()
@@ -330,14 +313,6 @@ with tab2:
                     df_tampilan_tabel = df_filtered
                 
                 st.dataframe(df_tampilan_tabel, use_container_width=True)
-                
-                csv_data = df_tampilan_tabel.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download & Ekspor Laporan Penjualan (CSV)",
-                    data=csv_data,
-                    file_name=f"laporan_pos_{st.session_state.user_role.lower()}.csv",
-                    mime="text/csv",
-                )
 
 # --- TAB 3: MANAJEMEN PRODUK & HARGA ---
 with tab3:
@@ -349,8 +324,8 @@ with tab3:
             st.markdown("### ➕ Tambah Menu Produk Baru")
             with st.form("form_tambah_produk", clear_on_submit=True):
                 input_nama_baru = st.text_input("Nama Produk Baru / SKU").strip()
-                input_harga_jual = st.number_input("Harga Jual Awal (Rp)", min_value=0, value=100000, step=1000)
-                input_harga_modal = st.number_input("Harga Modal Awal (Rp)", min_value=0, value=60000, step=1000)
+                input_harga_jual = st.number_input("Harga Jual Awal (Rp)", min_value=0, value=50000, step=1000)
+                input_harga_modal = st.number_input("Harga Modal Awal (Rp)", min_value=0, value=30000, step=1000)
                 tombol_submit_produk = st.form_submit_button("Tambahkan ke Sistem", use_container_width=True)
                 
                 if tombol_submit_produk:
@@ -372,25 +347,27 @@ with tab3:
                 produk_mau_dihapus = st.selectbox("Pilih Produk yang Akan Dibuang", options=MASTER_PRODUK_AKTIF)
                 if st.button("❌ Hapus Produk Terpilih Selamanya", type="secondary", use_container_width=True):
                     if hapus_produk_by_name(produk_mau_dihapus):
-                        st.success(f"💥 Produk '{produk_mau_dihapus}' berhasil dibuang dari sistem jualan!")
+                        st.success(f"💥 Produk '{produk_mau_dihapus}' berhasil dihapus!")
                         st.rerun()
         st.markdown("---")
 
     st.markdown("## ⚙️ Update Harga Modal & Jual Pasar Hari Ini")
-    st.info("💡 Klik langsung pada angka di tabel, ubah nilainya, lalu klik tombol simpan di bawah.")
-    
-    df_editor = st.data_editor(
-        df_harga_aktif, 
-        disabled=["Produk"], 
-        use_container_width=True,
-        key="editor_harga",
-        column_config={
-            "Harga Jual": st.column_config.NumberColumn("Harga Jual (Rp)", min_value=0, format="%d"),
-            "Harga Modal": st.column_config.NumberColumn("Harga Modal (Rp)", min_value=0, format="%d")
-        }
-    )
-    
-    if st.button("💾 Simpan Perubahan Harga Hari Ini", type="primary", use_container_width=True):
-        simpan_database_harga(df_editor)
-        st.success("🎉 Sukses! Harga Modal & Harga Jual harian berhasil diperbarui ke dalam sistem!")
-        st.rerun()
+    if not MASTER_PRODUK_AKTIF:
+        st.info("Belum ada data tabel harga harian karena produk masih kosong, Bestie.")
+    else:
+        st.info("💡 Klik langsung pada angka di tabel, ubah nilainya, lalu klik tombol simpan di bawah.")
+        df_editor = st.data_editor(
+            df_harga_aktif, 
+            disabled=["Produk"], 
+            use_container_width=True,
+            key="editor_harga",
+            column_config={
+                "Harga Jual": st.column_config.NumberColumn("Harga Jual (Rp)", min_value=0, format="%d"),
+                "Harga Modal": st.column_config.NumberColumn("Harga Modal (Rp)", min_value=0, format="%d")
+            }
+        )
+        
+        if st.button("💾 Simpan Perubahan Harga Hari Ini", type="primary", use_container_width=True):
+            simpan_database_harga(df_editor)
+            st.success("🎉 Sukses! Harga berhasil diperbarui!")
+            st.rerun()
