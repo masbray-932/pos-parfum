@@ -199,7 +199,7 @@ with st.sidebar:
         st.session_state.username = ""
         st.rerun()
 
-st.title("🏪 MESIN POS KLON - DUA PLATFORM")
+st.title("🏪 MESIN POS PARFUM")
 st.write(f"Selamat bekerja, **{st.session_state.user_role}**!")
 
 tab1, tab2, tab3 = st.tabs(["📥 Input Transaksi Baru", "📈 Riwayat & Laporan Penjualan", "⚙️ Kelola Manajemen Produk & Harga"])
